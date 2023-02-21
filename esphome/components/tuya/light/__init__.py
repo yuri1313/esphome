@@ -5,7 +5,6 @@ from esphome.const import (
     CONF_OUTPUT_ID,
     CONF_MIN_VALUE,
     CONF_MAX_VALUE,
-    CONF_GAMMA_CORRECT,
     CONF_DEFAULT_TRANSITION_LENGTH,
     CONF_SWITCH_DATAPOINT,
     CONF_COLD_WHITE_COLOR_TEMPERATURE,
@@ -68,7 +67,6 @@ CONFIG_SCHEMA = cv.All(
             ): cv.color_temperature,
             # Change the default gamma_correct and default transition length settings.
             # The Tuya MCU handles transitions and gamma correction on its own.
-            cv.Optional(CONF_GAMMA_CORRECT, default=1.0): cv.positive_float,
             cv.Optional(
                 CONF_DEFAULT_TRANSITION_LENGTH, default="0s"
             ): cv.positive_time_period_milliseconds,

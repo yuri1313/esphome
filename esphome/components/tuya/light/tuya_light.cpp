@@ -33,8 +33,34 @@ void TuyaLight::setup() {
         return;
       }
 
+      // Ignore dimmer values received once switch is off, such as during switch-off
+      // fade out. This allows restoring the present brightness on next switch on
+      if (!this->state_->current_values.is_on()) {
+        return;
+      }
+
+      this->inhibit_next_send_ = true;
+
+      // Clip value to expected range, allowing for inverted range
+      auto lower = std::min(this->min_value_, this->max_value_);
+      auto upper = std::max(this->min_value_, this->max_value_);
+      auto value = std::min(upper, std::max(lower, static_cast<int32_t>(datapoint.value_uint)));
+      float brightness = float(value - this->min_value_) /
+                         (this->max_value_ - this->min_value_);  // Don't use lower/upper here to allow inversion
+      brightness = powf(brightness, 1.0 / this->state_->get_gamma_correct());  // Apply inverse gamma correction
+
+      // Handle case where reported value is <= lower bound but not
+      // zero, but we don't want light to appear off by setting
+      // brightness = 0.0.
+      // This can occur when we sent a value near the lower bound
+      // and the returned value is not exactly what we set.
+      if (lower > 0 && brightness == 0.0f) {
+        brightness = 1.0 / (upper - lower);
+      }
+
+      ESP_LOGV(TAG, "Received brightness: %f %d", brightness, value);
       auto call = this->state_->make_call();
-      call.set_brightness(float(datapoint.value_uint) / this->max_value_);
+      call.set_brightness(brightness);
       call.perform();
     });
   }
@@ -45,6 +71,8 @@ void TuyaLight::setup() {
         return;
       }
 
+      this->inhibit_next_send_ = true;
+      ESP_LOGV(TAG, "Received switch: %d", datapoint.value_bool);
       auto call = this->state_->make_call();
       call.set_state(datapoint.value_bool);
       call.perform();
@@ -141,6 +169,11 @@ void TuyaLight::write_state(light::LightState *state) {
   float red = 0.0f, green = 0.0f, blue = 0.0f;
   float color_temperature = 0.0f, brightness = 0.0f;
 
+  if (this->inhibit_next_send_) {
+    this->inhibit_next_send_ = false;
+    return;
+  }
+
   if (this->color_id_.has_value()) {
     if (this->color_temperature_id_.has_value()) {
       state->current_values_as_rgbct(&red, &green, &blue, &color_temperature, &brightness);
@@ -160,6 +193,8 @@ void TuyaLight::write_state(light::LightState *state) {
     return;
   }
 
+  bool is_on = brightness != 0.0f;
+
   if (brightness > 0.0f || !color_interlock_) {
     if (this->color_temperature_id_.has_value()) {
       uint32_t color_temp_int = static_cast<uint32_t>(color_temperature * this->color_temperature_max_value_);
@@ -170,9 +205,10 @@ void TuyaLight::write_state(light::LightState *state) {
     }
 
     if (this->dimmer_id_.has_value()) {
-      auto brightness_int = static_cast<uint32_t>(brightness * this->max_value_);
-      brightness_int = std::max(brightness_int, this->min_value_);
+      uint32_t brightness_int = std::ceil(brightness * (this->max_value_ - this->min_value_) + this->min_value_);
+      ESP_LOGV(TAG, "Setting brightness: %f %d", brightness, brightness_int);
 
+      brightness_int = is_on ? brightness_int : 0; 
       parent_->set_integer_datapoint_value(*this->dimmer_id_, brightness_int);
     }
   }
@@ -210,7 +246,9 @@ void TuyaLight::write_state(light::LightState *state) {
   }
 
   if (this->switch_id_.has_value()) {
-    parent_->set_boolean_datapoint_value(*this->switch_id_, true);
+    ESP_LOGV(TAG, "Setting switch: %d", is_on);
+
+    parent_->set_boolean_datapoint_value(*this->switch_id_, is_on);
   }
 }
 
