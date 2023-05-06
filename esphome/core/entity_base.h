@@ -54,13 +54,24 @@ class EntityBase {
   void calc_object_id_();
 
   StringRef name_;
-  bool has_own_name_{false};
   const char *object_id_c_str_{nullptr};
   const char *icon_c_str_{nullptr};
   uint32_t object_id_hash_;
+  bool has_own_name_{false};
   bool internal_{false};
   bool disabled_by_default_{false};
   EntityCategory entity_category_{ENTITY_CATEGORY_NONE};
+};
+
+class EntityBase_DeviceClass {
+ public:
+  /// Get the device class, using the manual override if set.
+  std::string get_device_class();
+  /// Manually set the device class.
+  void set_device_class(const char *device_class);
+
+ protected:
+  const char *device_class_{nullptr};  ///< Device class override
 };
 
 }  // namespace esphome
