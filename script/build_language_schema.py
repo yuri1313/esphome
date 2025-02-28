@@ -1,9 +1,10 @@
+import argparse
+import glob
 import inspect
 import json
-import argparse
 import os
-import glob
 import re
+
 import voluptuous as vol
 
 # NOTE: Cannot import other esphome components globally as a modification in vol_schema
@@ -84,23 +85,22 @@ def load_components():
 
 
 # pylint: disable=wrong-import-position
-from esphome.const import CONF_TYPE, KEY_CORE
+from esphome.const import CONF_TYPE, KEY_CORE, KEY_TARGET_PLATFORM
 from esphome.core import CORE
 
 # pylint: enable=wrong-import-position
 
-CORE.data[KEY_CORE] = {}
+CORE.data[KEY_CORE] = {KEY_TARGET_PLATFORM: None}
 load_components()
 
 # Import esphome after loading components (so schema is tracked)
 # pylint: disable=wrong-import-position
-import esphome.core as esphome_core
-import esphome.config_validation as cv
-from esphome import automation
-from esphome import pins
+from esphome import automation, pins
 from esphome.components import remote_base
-from esphome.loader import get_platform, CORE_COMPONENTS_PATH
+import esphome.config_validation as cv
+import esphome.core as esphome_core
 from esphome.helpers import write_file_if_changed
+from esphome.loader import CORE_COMPONENTS_PATH, get_platform
 from esphome.util import Registry
 
 # pylint: enable=wrong-import-position
@@ -394,9 +394,8 @@ def add_referenced_recursive(referenced_schemas, config_var, path, eat_schema=Fa
         for k in schema.get(S_EXTENDS, []):
             if k not in referenced_schemas:
                 referenced_schemas[k] = [path]
-            else:
-                if path not in referenced_schemas[k]:
-                    referenced_schemas[k].append(path)
+            elif path not in referenced_schemas[k]:
+                referenced_schemas[k].append(path)
 
             s1 = get_str_path_schema(k)
             p = k.split(".")
@@ -868,13 +867,12 @@ def convert(schema, config_var, path):
                     config_var[S_TYPE] = "use_id"
                 else:
                     print("TODO deferred?")
+            elif isinstance(data, str):
+                # TODO: Figure out why pipsolar does this
+                config_var["use_id_type"] = data
             else:
-                if isinstance(data, str):
-                    # TODO: Figure out why pipsolar does this
-                    config_var["use_id_type"] = data
-                else:
-                    config_var["use_id_type"] = str(data.base)
-                    config_var[S_TYPE] = "use_id"
+                config_var["use_id_type"] = str(data.base)
+                config_var[S_TYPE] = "use_id"
         else:
             raise TypeError("Unknown extracted schema type")
     elif config_var.get("key") == "GeneratedID":
